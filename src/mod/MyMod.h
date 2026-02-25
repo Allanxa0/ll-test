@@ -19,7 +19,7 @@ public:
     /// @return True if the mod is enabled successfully.
     bool enable();
 
-    /// @return True if the mod is disabled successfully.
+    /// @return True if the mod is disabled successfull
     bool disable();
 
     // TODO: Implement this method if you need to unload the mod.
