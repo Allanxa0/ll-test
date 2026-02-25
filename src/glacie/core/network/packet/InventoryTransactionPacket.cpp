@@ -1,14 +1,22 @@
+#include "ll/api/memory/Hook.h"
 #include "mc/network/packet/InventoryTransactionPacket.h"
 #include "mc/world/ContainerID.h"
 #include "mc/world/inventory/transaction/InventoryAction.h"
 #include "mc/world/inventory/transaction/InventorySource.h"
 #include "mc/world/inventory/transaction/InventoryTransaction.h"
+#include "mc/world/inventory/transaction/ComplexInventoryTransaction.h"
+#include "mc/world/inventory/transaction/ItemUseInventoryTransaction.h"
 #include "mc/world/item/NetworkItemStackDescriptor.h"
+#include "mc/world/item/ItemStack.h"
+#include "mc/world/actor/player/Player.h"
+#include "mc/common/SharedConstants.h"
+#include <unordered_map>
+#include <unordered_set>
 
 extern std::unordered_map<uint64, int> PlayerGuidMap;
-int                                    NetworkProtocolVersion = 0;
 
 bool setValuesAndMatch(ItemStack* a1, ItemStack* a2) {
+    if (!a1 || !a2) return false;
     auto AuxValue = a1->getAuxValue();
     a2->setAuxValue(AuxValue);
     if (a1->hasDamageValue()) {
@@ -36,15 +44,15 @@ std::unordered_set<std::string> TranslateItemMap = {
     "stone"
 };
 
-bool isTranslateItem(std::string item) {
-    if (TranslateItemMap.count(item)) { return true; }
-    return false;
+bool isTranslateItem(std::string const& item) {
+    return TranslateItemMap.find(item) != TranslateItemMap.end();
 }
 
-extern void Serialize_630(NetworkItemStackDescriptor NetItem, BinaryStream* bs);
-LL_AUTO_TYPED_INSTANCE_HOOK(
-    InventoryTransacationPacketWrite,
-    HookPriority::Normal,
+extern void Serialize_630(NetworkItemStackDescriptor const& NetItem, BinaryStream& bs);
+
+LL_AUTO_TYPE_INSTANCE_HOOK(
+    InventoryTransactionPacketWrite,
+    ll::memory::HookPriority::Normal,
     InventoryTransactionPacket,
     "?write@InventoryTransactionPacket@@UEBAXAEAVBinaryStream@@@Z",
     void,
@@ -53,68 +61,78 @@ LL_AUTO_TYPED_INSTANCE_HOOK(
     if (this->mProtocolVersion >= 630) {
         int legacyRequestId = this->mLegacyRequestId.mRawId;
         bs.writeVarInt(legacyRequestId);
+        
         if (legacyRequestId < -1 && (legacyRequestId & 1) == 0) {
-            bs.writeUnsignedVarInt(this->mLegacySetItemSlots.size());
-            for (auto& slot : this->mLegacySetItemSlots) {
-                bs.writeByte((uchar)slot.first);
-                bs.writeUnsignedVarInt(slot.second.size());
-                for (auto& key : slot.second) { bs.writeByte(key); }
+            bs.writeUnsignedVarInt(static_cast<uint>(this->mLegacySetItemSlots.size()));
+            for (auto const& slot : this->mLegacySetItemSlots) {
+                bs.writeByte(static_cast<uchar>(slot.first));
+                bs.writeUnsignedVarInt(static_cast<uint>(slot.second.size()));
+                for (auto key : slot.second) { bs.writeByte(key); }
             }
         }
-        ComplexInventoryTransaction::Type transactionType = this->mTransaction->type;
-        bs.writeUnsignedVarInt((uint)transactionType);
-        auto time = 0;
-        for (auto& action : this->mTransaction->data.actions) { time = time + action.second.size(); }
-        bs.writeUnsignedVarInt(time);
-        for (auto& action : this->mTransaction->data.actions) {
-            for (auto& transaction : action.second) {
-                int sourceType = (int)transaction.mSource.mType;
-                if (!this->mIsClientSide) {
-                    if (transaction.mToItem.mValid) {
-                        if (!transaction.mToItem.mItem.expired() && !transaction.mToItem.isNull()
-                            && transaction.mToItem.mCount) {
-                            if ((sourceType != 3 && sourceType != 2) || transaction.mSlot) {
+
+        if (this->mTransaction) {
+            ComplexInventoryTransaction::Type transactionType = this->mTransaction->type;
+            bs.writeUnsignedVarInt(static_cast<uint>(transactionType));
+            
+            uint totalActions = 0;
+            for (auto const& actionGroup : this->mTransaction->data.actions) { 
+                totalActions += static_cast<uint>(actionGroup.second.size()); 
+            }
+            
+            bs.writeUnsignedVarInt(totalActions);
+            
+            for (auto& actionGroup : this->mTransaction->data.actions) {
+                for (auto& transaction : actionGroup.second) {
+                    int sourceType = static_cast<int>(transaction.mSource.mType);
+                    
+                    if (!this->mIsClientSide) {
+                        if (transaction.mToItem.mValid && !transaction.mToItem.mItem.expired() && 
+                            !transaction.mToItem.isNull() && transaction.mToItem.mCount > 0) {
+                            
+                            if ((sourceType != 3 && sourceType != 2) || transaction.mSlot != 0) {
                                 transaction.mToItem.tryGetItemStackNetId();
                                 transaction.mToItemDescriptor.mIncludeNetIds = true;
                             }
                         }
                     }
+
+                    bs.writeUnsignedVarInt(sourceType);
+                    switch (sourceType) {
+                        case 0:
+                        case 99999:
+                            bs.writeVarInt(static_cast<int>(transaction.mSource.mContainerId));
+                            break;
+                        case 2:
+                            bs.writeUnsignedVarInt(static_cast<uint>(transaction.mSource.mFlags));
+                            break;
+                        default:
+                            break;
+                    }
+                    
+                    bs.writeUnsignedVarInt(transaction.mSlot);
+                    Serialize_630(transaction.mFromItemDescriptor, bs);
+                    Serialize_630(transaction.mToItemDescriptor, bs);
                 }
-                bs.writeUnsignedVarInt(sourceType);
-                switch (sourceType) {
-                case 0:
-                case 99999:
-                    bs.writeVarInt((int)transaction.mSource.mContainerId);
-                    break;
-                case 2:
-                    bs.writeUnsignedVarInt((int)transaction.mSource.mFlags);
-                    break;
-                default: {
-                    break;
-                }
-                }
-                bs.writeUnsignedVarInt(transaction.mSlot);
-                Serialize_630(transaction.mFromItemDescriptor, &bs);
-                Serialize_630(transaction.mToItemDescriptor, &bs);
             }
+            this->mTransaction->write(bs);
         }
-        this->mTransaction->write(bs);
     } else {
-        return origin(bs);
+        origin(bs);
     }
 }
 
-LL_AUTO_TYPED_INSTANCE_HOOK(
+LL_AUTO_TYPE_INSTANCE_HOOK(
     ItemUseInventoryTransactionHandle,
-    HookPriority::Normal,
+    ll::memory::HookPriority::Normal,
     ItemUseInventoryTransaction,
     "?handle@ItemUseInventoryTransaction@@UEBA?AW4InventoryTransactionError@@AEAVPlayer@@_N@Z",
     ::InventoryTransactionError,
     Player& pl,
-    bool    a1
+    bool a1
 ) {
     auto ver = PlayerGuidMap[pl.getNetworkIdentifier().mGuid.g];
-    if (ver != SharedConstants::NetworkProtocolVersion) {
+    if (ver != 0 && ver != SharedConstants::NetworkProtocolVersion) {
         this->mTargetBlockId = GlobalBlockP->getBlockRuntimeIdFromOther(ver, this->mTargetBlockId);
     }
     return origin(pl, a1);

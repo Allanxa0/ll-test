@@ -1,58 +1,85 @@
 #pragma once
-#include "zlib.h"
 #include <iostream>
+#include <string>
+#include <vector>
+#include <zlib.h>
 
 namespace gzip {
+
 inline bool decompress(const std::string& compressed_str, std::string& decompressed_str) {
-    z_stream d_stream = {0}; 
-    d_stream.zalloc   = Z_NULL;
-    d_stream.zfree    = Z_NULL;
-    d_stream.opaque   = Z_NULL;
-    d_stream.avail_in = 0;
-    d_stream.next_in  = Z_NULL;
-    if (inflateInit2(&d_stream, MAX_WBITS + 16) != Z_OK) { return false; }
+    if (compressed_str.empty()) return false;
 
-    d_stream.next_in  = (Bytef*)compressed_str.data();
-    d_stream.avail_in = compressed_str.size();
+    z_stream d_stream{}; 
+    
+    if (inflateInit2(&d_stream, MAX_WBITS + 16) != Z_OK) { 
+        return false; 
+    }
 
-    char        outbuffer[1];
+    d_stream.next_in  = reinterpret_cast<Bytef*>(const_cast<char*>(compressed_str.data()));
+    d_stream.avail_in = static_cast<uInt>(compressed_str.size());
+
+    char outbuffer[4096]; 
+    std::string outstring;
+
+    int status;
+    do {
+        d_stream.next_out  = reinterpret_cast<Bytef*>(outbuffer);
+        d_stream.avail_out = sizeof(outbuffer);
+
+        status = inflate(&d_stream, Z_NO_FLUSH);
+
+        if (status < 0) { 
+            inflateEnd(&d_stream);
+            return false;
+        }
+
+        uInt have = sizeof(outbuffer) - d_stream.avail_out;
+        if (have > 0) {
+            outstring.append(outbuffer, have);
+        }
+    } while (status != Z_STREAM_END && d_stream.avail_in != 0);
+
+    inflateEnd(&d_stream);
+    decompressed_str = std::move(outstring);
+    return (status == Z_STREAM_END || status == Z_OK);
+}
+
+inline bool compress(const std::string& original_str, std::string& str) {
+    if (original_str.empty()) return false;
+
+    z_stream d_stream{};
+    
+    if (deflateInit2(&d_stream, Z_BEST_COMPRESSION, Z_DEFLATED, MAX_WBITS + 16, 8, Z_DEFAULT_STRATEGY) != Z_OK) {
+        return false;
+    }
+
+    d_stream.next_in  = reinterpret_cast<Bytef*>(const_cast<char*>(original_str.data()));
+    d_stream.avail_in = static_cast<uInt>(original_str.size());
+
+    int status;
+    char outbuffer[4096];
     std::string outstring;
 
     do {
         d_stream.next_out  = reinterpret_cast<Bytef*>(outbuffer);
         d_stream.avail_out = sizeof(outbuffer);
 
-        inflate(&d_stream, Z_NO_FLUSH);
+        status = deflate(&d_stream, Z_FINISH);
 
-        if (d_stream.avail_out == 0) {
-            outstring.append(outbuffer, sizeof(outbuffer) - d_stream.avail_out);
-            d_stream.next_out  = reinterpret_cast<Bytef*>(outbuffer);
-            d_stream.avail_out = sizeof(outbuffer);
+        uInt have = sizeof(outbuffer) - d_stream.avail_out;
+        if (have > 0) {
+            outstring.append(outbuffer, have);
         }
-    } while (d_stream.avail_in != 0);
+    } while (status == Z_OK);
 
-    inflateEnd(&d_stream);
+    deflateEnd(&d_stream);
 
-    decompressed_str.swap(outstring);
-    return true;
-}
-
-inline bool compress(const std::string& original_str, std::string& str) {
-    z_stream d_stream = {0};
-    if (Z_OK != deflateInit2(&d_stream, Z_BEST_COMPRESSION, Z_DEFLATED, MAX_WBITS + 16, 9, Z_DEFAULT_STRATEGY)) {
+    if (status != Z_STREAM_END) {
         return false;
     }
-    unsigned long len = compressBound(original_str.size());
-    auto*         buf = (unsigned char*)malloc(len);
-    if (!buf) { return false; }
-    d_stream.next_in   = (unsigned char*)(original_str.c_str());
-    d_stream.avail_in  = original_str.size();
-    d_stream.next_out  = buf;
-    d_stream.avail_out = len;
-    deflate(&d_stream, Z_SYNC_FLUSH);
-    deflateEnd(&d_stream);
-    str.assign((char*)buf, d_stream.total_out);
-    free(buf);
+
+    str = std::move(outstring);
     return true;
 }
-} // namespace gzip
+
+} 

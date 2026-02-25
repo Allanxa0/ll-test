@@ -1,314 +1,135 @@
-#include "glacie/api/memory/MemoryUtils.h"
-#include "mc/world/item/ItemDescriptor.h"
+#include "ll/api/memory/Hook.h"
+#include "mc/network/packet/CraftingDataPacket.h"
+#include "mc/deps/core/utility/BinaryStream.h"
+#include "mc/world/item/ItemInstance.h"
 #include "mc/world/item/NetworkItemStackDescriptor.h"
-#include "mc/world/item/crafting/ShapedRecipe.h"
+#include "mc/world/item/registry/ItemRegistryManager.h"
+#include "mc/world/item/registry/ItemRegistry.h"
+#include "mc/world/item/ItemDescriptor.h"
+#include "mc/world/item/crafting/Recipe.h"
 
-void InsSerialize_630(ItemInstance ItemInstance, BinaryStream* stream) {
-    NetworkItemInstanceDescriptor       networkitem(ItemInstance);
-    int16                               id           = networkitem.getId();
-    int16                               stackSize    = networkitem.getStackSize();
-    std::shared_ptr<class ItemRegistry> itemRegistry = ItemRegistryManager::getItemRegistry()._lockRegistry();
-    WeakPtr<class Item>                 item         = itemRegistry->getItem(id);
-    short                               auxValue     = 0;
-    Item*                               ptr          = nullptr;
-    if (!item.expired()) ptr = item.get();
-    if (networkitem.isValid(true) && ptr) {
+void InsSerialize_630(ItemInstance const& itemInstance, BinaryStream& stream) {
+    NetworkItemInstanceDescriptor networkitem(itemInstance);
+    int16 id = networkitem.getId();
+    int16 stackSize = networkitem.getStackSize();
+    auto itemRegistry = ItemRegistryManager::getItemRegistry()._lockRegistry();
+    auto item = itemRegistry->getItem(id);
+    short auxValue = 0;
+    
+    if (!item.expired() && networkitem.isValid(true)) {
         if (!networkitem.getBlock()) { auxValue = networkitem.getAuxValue(); }
         switch (networkitem.getIdAux()) {
-        case 327681: {
-            stream->writeVarInt(-739);
-            stream->writeUnsignedShort(stackSize);
-            stream->writeUnsignedVarInt(0);
-            break;
+            case 327681: stream.writeVarInt(-739); stream.writeUnsignedShort(stackSize); stream.writeUnsignedVarInt(0); break;
+            case 327682: stream.writeVarInt(-740); stream.writeUnsignedShort(stackSize); stream.writeUnsignedVarInt(0); break;
+            case 327683: stream.writeVarInt(-741); stream.writeUnsignedShort(stackSize); stream.writeUnsignedVarInt(0); break;
+            case 327684: stream.writeVarInt(-742); stream.writeUnsignedShort(stackSize); stream.writeUnsignedVarInt(0); break;
+            case 327685: stream.writeVarInt(-743); stream.writeUnsignedShort(stackSize); stream.writeUnsignedVarInt(0); break;
+            case 65537:  stream.writeVarInt(-590); stream.writeUnsignedShort(stackSize); stream.writeUnsignedVarInt(0); break;
+            case 65539:  stream.writeVarInt(-592); stream.writeUnsignedShort(stackSize); stream.writeUnsignedVarInt(0); break;
+            case 65541:  stream.writeVarInt(-594); stream.writeUnsignedShort(stackSize); stream.writeUnsignedVarInt(0); break;
+            case 65538:  stream.writeVarInt(-591); stream.writeUnsignedShort(stackSize); stream.writeUnsignedVarInt(0); break;
+            case 65540:  stream.writeVarInt(-593); stream.writeUnsignedShort(stackSize); stream.writeUnsignedVarInt(0); break;
+            case 65542:  stream.writeVarInt(-595); stream.writeUnsignedShort(stackSize); stream.writeUnsignedVarInt(0); break;
+            default:     stream.writeVarInt(id);   stream.writeUnsignedShort(stackSize); stream.writeUnsignedVarInt(auxValue); break;
         }
-        case 327682: {
-            stream->writeVarInt(-740);
-            stream->writeUnsignedShort(stackSize);
-            stream->writeUnsignedVarInt(0);
-            break;
-        }
-        case 327683: {
-            stream->writeVarInt(-741);
-            stream->writeUnsignedShort(stackSize);
-            stream->writeUnsignedVarInt(0);
-            break;
-        }
-        case 327684: {
-            stream->writeVarInt(-742);
-            stream->writeUnsignedShort(stackSize);
-            stream->writeUnsignedVarInt(0);
-            break;
-        }
-        case 327685: {
-            stream->writeVarInt(-743);
-            stream->writeUnsignedShort(stackSize);
-            stream->writeUnsignedVarInt(0);
-            break;
-        }
-        case 65537: {
-            stream->writeVarInt(-590);
-            stream->writeUnsignedShort(stackSize);
-            stream->writeUnsignedVarInt(0);
-            break;
-        }
-        case 65539: {
-            stream->writeVarInt(-592);
-            stream->writeUnsignedShort(stackSize);
-            stream->writeUnsignedVarInt(0);
-            break;
-        }
-        case 65541: {
-            stream->writeVarInt(-594);
-            stream->writeUnsignedShort(stackSize);
-            stream->writeUnsignedVarInt(0);
-            break;
-        }
-        case 65538: {
-            stream->writeVarInt(-591);
-            stream->writeUnsignedShort(stackSize);
-            stream->writeUnsignedVarInt(0);
-            break;
-        }
-        case 65540: {
-            stream->writeVarInt(-593);
-            stream->writeUnsignedShort(stackSize);
-            stream->writeUnsignedVarInt(0);
-            break;
-        }
-        case 65542: {
-            stream->writeVarInt(-595);
-            stream->writeUnsignedShort(stackSize);
-            stream->writeUnsignedVarInt(0);
-            break;
-        }
-
-        default: {
-            stream->writeVarInt(id);
-            stream->writeUnsignedShort(stackSize);
-            stream->writeUnsignedVarInt(auxValue);
-        }
-        }
-        stream->writeVarInt(GlobalBlockP->getBlockRuntimeIdFromMain(630, networkitem.mBlockRuntimeId));
-        stream->writeString(networkitem.mUserDataBuffer);
+        stream.writeVarInt(GlobalBlockP->getBlockRuntimeIdFromMain(630, networkitem.mBlockRuntimeId));
+        stream.writeString(networkitem.mUserDataBuffer);
     } else {
-        stream->writeVarInt(0);
+        stream.writeVarInt(0);
     }
 }
-LL_AUTO_TYPED_INSTANCE_HOOK(
+
+LL_AUTO_TYPE_INSTANCE_HOOK(
     CraftingDataPacketWrite,
-    HookPriority::Normal,
+    ll::memory::HookPriority::Normal,
     CraftingDataPacket,
     "?write@CraftingDataPacket@@UEBAXAEAVBinaryStream@@@Z",
     void,
     BinaryStream& bs
 ) {
     if (this->mProtocolVersion >= 630) {
-        bs.writeUnsignedVarInt(this->mCraftingEntries.size());
+        bs.writeUnsignedVarInt(static_cast<uint>(this->mCraftingEntries.size()));
         for (auto& recipe : this->mCraftingEntries) {
-            switch ((int)recipe.mEntryType) {
-            case 0: {
-                bs.writeVarInt((int)recipe.mEntryType);
+            int type = static_cast<int>(recipe.mEntryType);
+            if (type == 0 || type == 1) {
+                bs.writeVarInt(type);
                 bs.writeString(recipe.mRecipe->mRecipeId);
-                bs.writeUnsignedVarInt(recipe.mRecipe->mMyIngredients.size());
-                for (auto& Ingredients : recipe.mRecipe->mMyIngredients) {
-                    Ingredients._resolve();
-                    if (!Ingredients.isNull()) {
-                        bs.writeUnsignedChar((char)Ingredients.mImpl->getType());
-                        if (Ingredients.mImpl->getType() == ItemDescriptor::InternalType::Default) {
-                            auto DItem = Ingredients.mImpl->getItem().mItem;
-                            if (DItem) {
-                                auto idaux0 = Ingredients.getIdAux();
-                                auto id     = DItem->getId();
-                                switch (idaux0) {
-                                case 327681: {
-                                    bs.writeUnsignedShort(-739);
-                                    break;
-                                }
-                                case 327682: {
-                                    bs.writeUnsignedShort(-740);
-                                    break;
-                                }
-                                case 327683: {
-                                    bs.writeUnsignedShort(-741);
-                                    break;
-                                }
-                                case 327684: {
-                                    bs.writeUnsignedShort(-742);
-                                    break;
-                                }
-                                case 327685: {
-                                    bs.writeUnsignedShort(-743);
-                                    break;
-                                }
-                                case 65537: {
-                                    bs.writeUnsignedShort(-590);
-                                    break;
-                                }
-                                case 65539: {
-                                    bs.writeUnsignedShort(-592);
-                                    break;
-                                }
-                                case 65541: {
-                                    bs.writeUnsignedShort(-594);
-                                    break;
-                                }
-                                case 65538: {
-                                    bs.writeUnsignedShort(-591);
-                                    break;
-                                }
-                                case 65540: {
-                                    bs.writeUnsignedShort(-593);
-                                    break;
-                                }
-                                case 65542: {
-                                    bs.writeUnsignedShort(-595);
-                                    break;
-                                }
-
-                                default: {
-                                    bs.writeUnsignedShort(id);
-                                }
-                                }
-                                auto si = Ingredients.mImpl->getItem().mAuxValue;
-                                bs.writeUnsignedShort(si);
-                            } else {
-                                bs.writeUnsignedShort(0);
-                            }
-                        } else {
-                            Ingredients.mImpl->serialize(bs);
-                        }
-                    } else {
-                        bs.writeUnsignedChar(0);
-                    }
-                    bs.writeVarInt(Ingredients.mStackSize);
+                
+                if (type == 1) {
+                    bs.writeVarInt(recipe.mRecipe->mWidth);
+                    bs.writeVarInt(recipe.mRecipe->mHeight);
+                } else {
+                    bs.writeUnsignedVarInt(static_cast<uint>(recipe.mRecipe->mMyIngredients.size()));
                 }
-                bs.writeUnsignedVarInt(recipe.mRecipe->getResultItem().size());
-                for (auto& result : recipe.mRecipe->getResultItem()) { InsSerialize_630(result, &bs); }
+
+                auto writeIngredient = [&](ItemDescriptor& ingredient) {
+                    ingredient._resolve();
+                    if (!ingredient.isNull()) {
+                        bs.writeUnsignedChar(static_cast<uchar>(ingredient.mImpl->getType()));
+                        if (ingredient.mImpl->getType() == ItemDescriptor::InternalType::Default) {
+                            auto dItem = ingredient.mImpl->getItem().mItem;
+                            if (dItem) {
+                                int16 finalId = dItem->getId();
+                                switch (ingredient.getIdAux()) {
+                                    case 327681: finalId = -739; break;
+                                    case 327682: finalId = -740; break;
+                                    case 327683: finalId = -741; break;
+                                    case 327684: finalId = -742; break;
+                                    case 327685: finalId = -743; break;
+                                    case 65537:  finalId = -590; break;
+                                    case 65539:  finalId = -592; break;
+                                    case 65541:  finalId = -594; break;
+                                    case 65538:  finalId = -591; break;
+                                    case 65540:  finalId = -593; break;
+                                    case 65542:  finalId = -595; break;
+                                }
+                                bs.writeUnsignedShort(finalId);
+                                bs.writeUnsignedShort(ingredient.mImpl->getItem().mAuxValue);
+                            } else bs.writeUnsignedShort(0);
+                        } else ingredient.mImpl->serialize(bs);
+                    } else bs.writeUnsignedChar(0);
+                    bs.writeVarInt(ingredient.mStackSize);
+                };
+
+                if (type == 1) {
+                    for (int z = 0; z < recipe.mRecipe->mHeight; ++z)
+                        for (int x = 0; x < recipe.mRecipe->mWidth; ++x)
+                            writeIngredient(recipe.mRecipe->getIngredient(x, z));
+                } else {
+                    for (auto& ing : recipe.mRecipe->mMyIngredients) writeIngredient(ing);
+                }
+
+                bs.writeUnsignedVarInt(static_cast<uint>(recipe.mRecipe->getResultItem().size()));
+                for (auto const& result : recipe.mRecipe->getResultItem()) InsSerialize_630(result, bs);
+                
                 bs.writeUnsignedInt64(recipe.mRecipe->mMyId.a);
                 bs.writeUnsignedInt64(recipe.mRecipe->mMyId.b);
                 bs.writeString(recipe.mRecipe->getTag().getString());
                 bs.writeVarInt(recipe.mRecipe->mPriority);
-                auto NetId = recipe.mRecipe->mRecipeNetId;
-                bs.writeUnsignedVarInt(NetId.mRawId);
-                break;
-            }
-            case 1: {
-                bs.writeVarInt((int)recipe.mEntryType);
-                bs.writeString(recipe.mRecipe->mRecipeId);
-                bs.writeVarInt(recipe.mRecipe->mWidth);
-                bs.writeVarInt(recipe.mRecipe->mHeight);
-                for (int z = 0; z < recipe.mRecipe->mHeight; ++z) {
-                    for (int x = 0; x < recipe.mRecipe->mWidth; ++x) {
-                        recipe.mRecipe->getIngredient(x, z)._resolve();
-                        if (!recipe.mRecipe->getIngredient(x, z).isNull()) {
-                            bs.writeUnsignedChar((char)recipe.mRecipe->getIngredient(x, z).mImpl->getType());
-                            if (recipe.mRecipe->getIngredient(x, z).mImpl->getType()
-                                == ItemDescriptor::InternalType::Default) {
-                                auto DItem = recipe.mRecipe->getIngredient(x, z).mImpl->getItem().mItem;
-                                if (DItem) {
-                                    auto idaux0 = recipe.mRecipe->getIngredient(x, z).getIdAux();
-                                    auto id     = DItem->getId();
-                                    switch (idaux0) {
-                                    case 327681: {
-                                        bs.writeUnsignedShort(-739);
-                                        break;
-                                    }
-                                    case 327682: {
-                                        bs.writeUnsignedShort(-740);
-                                        break;
-                                    }
-                                    case 327683: {
-                                        bs.writeUnsignedShort(-741);
-                                        break;
-                                    }
-                                    case 327684: {
-                                        bs.writeUnsignedShort(-742);
-                                        break;
-                                    }
-                                    case 327685: {
-                                        bs.writeUnsignedShort(-743);
-                                        break;
-                                    }
-                                    case 65537: {
-                                        bs.writeUnsignedShort(-590);
-                                        break;
-                                    }
-                                    case 65539: {
-                                        bs.writeUnsignedShort(-592);
-                                        break;
-                                    }
-                                    case 65541: {
-                                        bs.writeUnsignedShort(-594);
-                                        break;
-                                    }
-                                    case 65538: {
-                                        bs.writeUnsignedShort(-591);
-                                        break;
-                                    }
-                                    case 65540: {
-                                        bs.writeUnsignedShort(-593);
-                                        break;
-                                    }
-                                    case 65542: {
-                                        bs.writeUnsignedShort(-595);
-                                        break;
-                                    }
-
-                                    default: {
-                                        bs.writeUnsignedShort(id);
-                                    }
-                                    }
-                                    auto si = recipe.mRecipe->getIngredient(x, z).mImpl->getItem().mAuxValue;
-                                    bs.writeUnsignedShort(si);
-                                } else {
-                                    bs.writeUnsignedShort(0);
-                                }
-                            } else {
-                                recipe.mRecipe->getIngredient(x, z).mImpl->serialize(bs);
-                            }
-                        } else {
-                            bs.writeUnsignedChar(0);
-                        }
-                        bs.writeVarInt(recipe.mRecipe->getIngredient(x, z).mStackSize);
-                    }
-                }
-                bs.writeUnsignedVarInt(recipe.mRecipe->getResultItem().size());
-                for (auto& result : recipe.mRecipe->getResultItem()) { InsSerialize_630(result, &bs); }
-                bs.writeUnsignedInt64(recipe.mRecipe->mMyId.a);
-                bs.writeUnsignedInt64(recipe.mRecipe->mMyId.b);
-                bs.writeString(recipe.mRecipe->getTag().getString());
-                bs.writeVarInt(recipe.mRecipe->mPriority);
-                auto NetId = recipe.mRecipe->mRecipeNetId;
-                bs.writeUnsignedVarInt(NetId.mRawId);
-                break;
-            }
-            default:
+                bs.writeUnsignedVarInt(recipe.mRecipe->mRecipeNetId.mRawId);
+            } else {
                 recipe.write(bs);
-                break;
             }
         }
-        bs.writeUnsignedVarInt(this->mPotionMixEntries.size());
-        for (auto& PotionMixEntry : mPotionMixEntries) {
-            bs.writeVarInt(PotionMixEntry.fromItemId);
-            bs.writeVarInt(PotionMixEntry.fromItemAux);
-            bs.writeVarInt(PotionMixEntry.reagentItemId);
-            bs.writeVarInt(PotionMixEntry.reagentItemAux);
-            bs.writeVarInt(PotionMixEntry.toItemId);
-            bs.writeVarInt(PotionMixEntry.toItemAux);
+        
+        bs.writeUnsignedVarInt(static_cast<uint>(this->mPotionMixEntries.size()));
+        for (auto const& entry : mPotionMixEntries) {
+            bs.writeVarInt(entry.fromItemId); bs.writeVarInt(entry.fromItemAux);
+            bs.writeVarInt(entry.reagentItemId); bs.writeVarInt(entry.reagentItemAux);
+            bs.writeVarInt(entry.toItemId); bs.writeVarInt(entry.toItemAux);
         }
-        bs.writeUnsignedVarInt(this->mContainerMixEntries.size());
-        for (auto& ContainerMixEntry : mContainerMixEntries) {
-            bs.writeVarInt(ContainerMixEntry.fromItemId);
-            bs.writeVarInt(ContainerMixEntry.reagentItemId);
-            bs.writeVarInt(ContainerMixEntry.toItemId);
+
+        bs.writeUnsignedVarInt(static_cast<uint>(this->mContainerMixEntries.size()));
+        for (auto const& entry : mContainerMixEntries) {
+            bs.writeVarInt(entry.fromItemId); bs.writeVarInt(entry.reagentItemId); bs.writeVarInt(entry.toItemId);
         }
-        bs.writeUnsignedVarInt(this->mMaterialReducerEntries.size());
-        for (auto& MaterialReducerEntry : mMaterialReducerEntries) {
-            bs.writeVarInt(MaterialReducerEntry.fromItemKey);
-            bs.writeUnsignedVarInt(MaterialReducerEntry.toItemIdsAndCounts.size());
-            for (auto& ita : MaterialReducerEntry.toItemIdsAndCounts) {
-                bs.writeVarInt(ita.itemId);
-                bs.writeVarInt(ita.itemCount);
+
+        bs.writeUnsignedVarInt(static_cast<uint>(this->mMaterialReducerEntries.size()));
+        for (auto const& entry : mMaterialReducerEntries) {
+            bs.writeVarInt(entry.fromItemKey);
+            bs.writeUnsignedVarInt(static_cast<uint>(entry.toItemIdsAndCounts.size()));
+            for (auto const& ita : entry.toItemIdsAndCounts) {
+                bs.writeVarInt(ita.itemId); bs.writeVarInt(ita.itemCount);
             }
         }
         bs.writeBool(this->mClearRecipes);

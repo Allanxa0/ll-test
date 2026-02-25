@@ -1,15 +1,24 @@
-
+#include "ll/api/memory/Hook.h"
+#include "ll/api/service/Bedrock.h"
+#include "mc/network/Packet.h"
+#include "mc/deps/core/utility/BinaryStream.h"
+#include "mc/deps/core/utility/ReadOnlyBinaryStream.h"
+#include "mc/network/MinecraftPacketIds.h"
+#include "mc/network/ServerNetworkHandler.h"
+#include "mc/server/ServerPlayer.h"
+#include "mc/network/NetworkIdentifier.h"
 #include <unordered_map>
-ServerNetworkHandler* TempHandler;
-NetworkIdentifier*    TempNetworkId;
+
 struct InventorySettings {
     int  leftTab;
     int  rightTab;
     bool filtering;
     int  layout;
     int  craftingLayout;
-} TempSetting;
+};
+
 std::unordered_map<long long, InventorySettings> PlayerInventorySettings;
+
 class SetPlayerInventoryOptionsPacket : public Packet {
 public:
     int  leftTab;
@@ -18,15 +27,19 @@ public:
     int  layout;
     int  craftingLayout;
 
-    SetPlayerInventoryOptionsPacket() {};
-    SetPlayerInventoryOptionsPacket(int leftTab, int rightTab, bool filtering, int layout, int craftingLayout)
-    : leftTab(leftTab),
-      rightTab(rightTab),
-      filtering(filtering),
-      layout(layout),
-      craftingLayout(craftingLayout) {};
+    SetPlayerInventoryOptionsPacket() : Packet() {}
+    SetPlayerInventoryOptionsPacket(int lt, int rt, bool f, int l, int cl)
+        : leftTab(lt), rightTab(rt), filtering(f), layout(l), craftingLayout(cl) {}
 
-    void write(BinaryStream& bs) const {
+    virtual MinecraftPacketIds getId() const override { 
+        return (MinecraftPacketIds)307; 
+    }
+
+    virtual std::string getName() const override { 
+        return "SetPlayerInventoryOptionsPacket"; 
+    }
+
+    virtual void write(BinaryStream& bs) const override {
         bs.writeVarInt(leftTab);
         bs.writeVarInt(rightTab);
         bs.writeBool(filtering);
@@ -34,94 +47,81 @@ public:
         bs.writeVarInt(craftingLayout);
     }
 
-    virtual class Bedrock::Result<void> _read(class ReadOnlyBinaryStream& a1) {
-        leftTab                    = a1.getVarInt().value();
-        rightTab                   = a1.getVarInt().value();
-        filtering                  = a1.getBool().value();
-        layout                     = a1.getVarInt().value();
-        craftingLayout             = a1.getVarInt().value();
-        TempSetting.leftTab        = leftTab;
-        TempSetting.rightTab       = rightTab;
-        TempSetting.filtering      = filtering;
-        TempSetting.layout         = layout;
-        TempSetting.craftingLayout = craftingLayout;
-        auto pl                    = TempHandler->getServerPlayer(*TempNetworkId, SubClientId::PrimaryClient);
-        auto id                    = (long long)pl->getOrCreateUniqueID();
-        if (PlayerInventorySettings.count(id)) {
-            PlayerInventorySettings[id] = TempSetting;
-        } else {
-            PlayerInventorySettings.insert({id, TempSetting});
+    virtual Bedrock::Result<void> _read(ReadOnlyBinaryStream& rs) override {
+        auto res1 = rs.getVarInt();
+        auto res2 = rs.getVarInt();
+        auto res3 = rs.getBool();
+        auto res4 = rs.getVarInt();
+        auto res5 = rs.getVarInt();
+
+        if (res1 && res2 && res3 && res4 && res5) {
+            leftTab = res1.value();
+            rightTab = res2.value();
+            filtering = res3.value();
+            layout = res4.value();
+            craftingLayout = res5.value();
+            return Bedrock::Result<void>::success();
         }
-        return {};
+        return Bedrock::Result<void>::error("Failed to read SetPlayerInventoryOptionsPacket");
     }
-
-    std::string getName() const { return "SetPlayerInventoryOptionsPacket"; }
-
-    MinecraftPacketIds getId() const { return MinecraftPacketIds::SetPlayerInventoryOptions; }
 };
 
-LL_AUTO_TYPED_INSTANCE_HOOK(
-    GetHandler,
-    HookPriority::Normal,
-    ServerNetworkHandler,
-    "?allowIncomingPacketId@ServerNetworkHandler@@UEAA_NAEBVNetworkIdentifier@@W4MinecraftPacketIds@@@Z",
-    bool,
-    class NetworkIdentifier const& a1,
-    ::MinecraftPacketIds           packetId
-) {
-    TempHandler = this;
-    GetHandler::unhook();
-    return origin(a1, packetId);
-}
-LL_AUTO_TYPED_INSTANCE_HOOK(
-    ReceiveInventorySettings,
-    HookPriority::Normal,
-    ServerNetworkHandler,
-    "?allowIncomingPacketId@ServerNetworkHandler@@UEAA_NAEBVNetworkIdentifier@@W4MinecraftPacketIds@@@Z",
-    bool,
-    NetworkIdentifier*   a1,
-    ::MinecraftPacketIds packetId
-) {
-    if ((int)packetId == 307) { TempNetworkId = a1; }
-    return origin(a1, packetId);
-}
-
-LL_AUTO_STATIC_HOOK(
+LL_AUTO_TYPE_STATIC_HOOK(
     CreatePackets,
-    HookPriority::Normal,
-    MinecraftPackets::createPacket,
-    std::shared_ptr<class Packet>,
-    MinecraftPacketIds Id
+    ll::memory::HookPriority::Normal,
+    MinecraftPackets,
+    "?createPacket@MinecraftPackets@@SA?AV?$shared_ptr@VPacket@@@std@@W4MinecraftPacketIds@@@Z",
+    std::shared_ptr<Packet>,
+    MinecraftPacketIds id
 ) {
-    switch (Id) {
-    case MinecraftPacketIds::SetPlayerInventoryOptions: {
+    if ((int)id == 307) {
         return std::make_shared<SetPlayerInventoryOptionsPacket>();
-    };
     }
-    return origin(Id);
+    return origin(id);
 }
 
-LL_AUTO_TYPED_INSTANCE_HOOK(
+LL_AUTO_TYPE_INSTANCE_HOOK(
+    InventoryOptionsPacketHandle,
+    ll::memory::HookPriority::Normal,
+    ServerNetworkHandler,
+    "?handle@ServerNetworkHandler@@UEAAXAEBVNetworkIdentifier@@AEBVPacket@@@Z",
+    void,
+    NetworkIdentifier const& id,
+    Packet const& pkt
+) {
+    if ((int)pkt.getId() == 307) {
+        auto const& iopkt = static_cast<SetPlayerInventoryOptionsPacket const&>(pkt);
+        auto* player = this->getServerPlayer(id, SubClientId::PrimaryClient);
+        if (player) {
+            InventorySettings settings{
+                iopkt.leftTab,
+                iopkt.rightTab,
+                iopkt.filtering,
+                iopkt.layout,
+                iopkt.craftingLayout
+            };
+            PlayerInventorySettings[player->getOrCreateUniqueID().id] = settings;
+        }
+    }
+    origin(id, pkt);
+}
+
+LL_AUTO_TYPE_INSTANCE_HOOK(
     SendJoinPacket,
-    HookPriority::Normal,
+    ll::memory::HookPriority::Normal,
     ServerPlayer,
     "?setLocalPlayerAsInitialized@ServerPlayer@@QEAAXXZ",
-    bool
+    void
 ) {
-    long long id = this->getOrCreateUniqueID().id;
-    if (PlayerInventorySettings.count(id)) {
-        InventorySettings settings = PlayerInventorySettings[id];
-        auto              pkt      = SetPlayerInventoryOptionsPacket(
-            settings.leftTab,
-            settings.rightTab,
-            settings.filtering,
-            settings.layout,
-            settings.craftingLayout
-        );
+    origin();
+    
+    long long uid = this->getOrCreateUniqueID().id;
+    if (PlayerInventorySettings.count(uid)) {
+        auto const& s = PlayerInventorySettings[uid];
+        SetPlayerInventoryOptionsPacket pkt(s.leftTab, s.rightTab, s.filtering, s.layout, s.craftingLayout);
         this->sendNetworkPacket(pkt);
     } else {
-        auto pkt = SetPlayerInventoryOptionsPacket(6, 2, true, 2, 2);
+        SetPlayerInventoryOptionsPacket pkt(6, 2, true, 2, 2);
         this->sendNetworkPacket(pkt);
     }
-    return origin();
 }

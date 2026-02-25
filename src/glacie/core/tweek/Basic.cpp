@@ -1,15 +1,11 @@
-#include "glacie/api/memory/Hook.h"
+#include "ll/api/memory/Hook.h"
+#include "mc/world/level/Level.h"
 
-#include "mc/network/ServerNetworkHandler.h"
-#include "mc/options/FeatureToggles.h"
-#include "mc/server/PropertiesSettings.h"
-
-// 强制开启方块NbtHash RuntimeID
-LL_AUTO_TYPED_INSTANCE_HOOK(
-    BlockNetworkIdsAreHashes,
-    HookPriority::Normal,
-    PropertiesSettings,
-    &PropertiesSettings::blockNetworkIdsAreHashes,
+LL_AUTO_TYPE_INSTANCE_HOOK(
+    BlockNetworkIdsAreHashesHook,
+    ll::memory::HookPriority::Normal,
+    Level,
+    "?blockNetworkIdsAreHashes@Level@@UEBA_NXZ",
     bool
 ) {
     return true;

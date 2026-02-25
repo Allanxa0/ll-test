@@ -1,3 +1,9 @@
+#include "ll/api/memory/Hook.h"
+#include "mc/network/packet/StartGamePacket.h"
+#include "mc/network/packet/AddItemActorPacket.h"
+#include "mc/deps/core/utility/BinaryStream.h"
+#include "mc/common/SharedConstants.h"
+#include <unordered_set>
 
 extern GlobalItemData* GlobalItemDataP;
 
@@ -16,42 +22,44 @@ std::unordered_set<std::string> NewItem_630 = {
     "minecraft:dark_oak_planks"
 };
 
-LL_AUTO_TYPED_INSTANCE_HOOK(
+LL_AUTO_TYPE_INSTANCE_HOOK(
     StartGamePacketWrite,
-    HookPriority::Normal,
+    ll::memory::HookPriority::Normal,
     StartGamePacket,
     "?write@StartGamePacket@@UEBAXAEAVBinaryStream@@@Z",
     void,
-    BinaryStream* bs
+    BinaryStream& bs
 ) {
     this->mServerBlockTypeRegistryChecksum = 0;
+    
     if (this->mProtocolVersion == 630) {
         for (auto& item : this->mItemData) {
-            if (item.mName.str == "minecraft:planks") {
-                item.mName.str = "minecraft:oak_planks";
-                item.mId       = 5;
+            if (item.mName.getString() == "minecraft:planks") {
+                item.mName = HashedString("minecraft:oak_planks");
+                item.mId = 5;
             }
         }
-        for (auto& item : GlobalItemDataP->getItemData(630)) {
-            if (NewItem_630.count(item.mName.str)) {
-                this->mItemData.push_back(ItemData(HashedString(item.mName.str), item.mId, item.mIsComponentBased));
+        
+        for (auto const& item : GlobalItemDataP->getItemData(630)) {
+            if (NewItem_630.find(item.mName.getString()) != NewItem_630.end()) {
+                this->mItemData.emplace_back(HashedString(item.mName.getString()), item.mId, item.mIsComponentBased);
             }
         }
     }
-    return origin(bs);
+    origin(bs);
 }
 
-LL_AUTO_TYPED_INSTANCE_HOOK(
+LL_AUTO_TYPE_INSTANCE_HOOK(
     AddItemActorPacketWrite,
-    HookPriority::Normal,
+    ll::memory::HookPriority::Normal,
     AddItemActorPacket,
     "?write@AddItemActorPacket@@UEBAXAEAVBinaryStream@@@Z",
     void,
-    BinaryStream* bs
+    BinaryStream& bs
 ) {
     if (this->mProtocolVersion != SharedConstants::NetworkProtocolVersion) {
         this->mItem.mBlockRuntimeId =
             GlobalBlockP->getBlockRuntimeIdFromMain(this->mProtocolVersion, this->mItem.mBlockRuntimeId);
     }
-    return origin(bs);
+    origin(bs);
 }

@@ -1,9 +1,13 @@
-
+#include "ll/api/memory/Hook.h"
+#include "mc/network/packet/AddItemActorPacket.h"
 #include "mc/world/item/NetworkItemStackDescriptor.h"
+#include "mc/deps/core/utility/BinaryStream.h"
+
 extern void Serialize_630(NetworkItemStackDescriptor NetItem, BinaryStream* bs);
-LL_AUTO_TYPED_INSTANCE_HOOK(
+
+LL_AUTO_TYPE_INSTANCE_HOOK(
     AddItemActorPacketWrite,
-    HookPriority::Normal,
+    ll::memory::HookPriority::Normal,
     AddItemActorPacket,
     "?write@AddItemActorPacket@@UEBAXAEAVBinaryStream@@@Z",
     void,
@@ -25,8 +29,7 @@ LL_AUTO_TYPED_INSTANCE_HOOK(
             bs.writeType(this->mData);
         }
         bs.writeBool(this->mIsFromFishing);
-
     } else {
-        return origin(bs);
+        origin(bs);
     }
 }

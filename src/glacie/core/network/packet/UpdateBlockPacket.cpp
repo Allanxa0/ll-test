@@ -1,21 +1,27 @@
+#include "ll/api/memory/Hook.h"
+#include "mc/network/packet/UpdateBlockPacket.h"
+#include "mc/deps/core/utility/BinaryStream.h"
+#include "mc/common/SharedConstants.h"
 
-extern std::unordered_map<uint64, int> PlayerGuidMap;
-
-LL_AUTO_TYPED_INSTANCE_HOOK(
+LL_AUTO_TYPE_INSTANCE_HOOK(
     UpdateBlockPacketWrite,
-    HookPriority::Normal,
+    ll::memory::HookPriority::Normal,
     UpdateBlockPacket,
     "?write@UpdateBlockPacket@@UEBAXAEAVBinaryStream@@@Z",
     void,
-    BinaryStream* bs
+    BinaryStream& bs
 ) {
     if (this->mProtocolVersion != SharedConstants::NetworkProtocolVersion) {
-        bs->writeVarInt(this->mPos.x);
-        bs->writeUnsignedVarInt(this->mPos.y);
-        bs->writeVarInt(this->mPos.z);
-        bs->writeUnsignedVarInt(GlobalBlockP->getBlockRuntimeIdFromMain(this->mProtocolVersion, this->mRuntimeId));
-        bs->writeUnsignedVarInt((int)this->mUpdateFlags);
-        bs->writeUnsignedVarInt((int)this->mLayer);
+        bs.writeVarInt(this->mPos.x);
+        bs.writeUnsignedVarInt(this->mPos.y);
+        bs.writeVarInt(this->mPos.z);
+        
+        
+        uint compatibleRuntimeId = GlobalBlockP->getBlockRuntimeIdFromMain(this->mProtocolVersion, this->mRuntimeId);
+        bs.writeUnsignedVarInt(compatibleRuntimeId);
+        
+        bs.writeUnsignedVarInt(static_cast<uint>(this->mUpdateFlags));
+        bs.writeUnsignedVarInt(static_cast<uint>(this->mLayer));
     } else {
         origin(bs);
     }
